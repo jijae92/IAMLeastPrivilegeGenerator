@@ -1,0 +1,3 @@
+{
+  "comment": "⚠️ **pip-audit findings (top 2)**\n\n| Severity | Package | Version | Vulnerability | Fix | Waived |\n| --- | --- | --- | --- | --- | --- |\n| HIGH | pkg1 | 1.0.0 | CVE-0001 | 1.1.0 | False |\n| LOW | pkg2 | 2.0.0 | CVE-0002 | - | True |\n\n📄 **Allowlist**\n\n| Type | Pattern | Owner | Expires | Reason |\n| --- | --- | --- | --- | --- |\n| Action | pkg2* | security@example.com | 2025-12-31T23:59:59Z | testing waiver |"
+}

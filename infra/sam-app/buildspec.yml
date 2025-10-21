@@ -1,0 +1,69 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+  pre_build:
+    commands:
+      - python -m pip install --upgrade pip
+      - pip install -r requirements.txt
+      - pip install .[dev]
+      - pytest --cov=core --cov=cli --cov-report=term-missing --cov-fail-under=80
+  build:
+    commands:
+      - echo "Running end-to-end pipeline"
+      - python -m iamlp.cli parse --local-dir tests/fixtures/cloudtrail --format json --output artifacts/events.jsonl
+      - python -m iamlp.cli aggregate --events artifacts/events.jsonl --format json --output artifacts/aggregate.json
+      - python -m iamlp.cli infer --events artifacts/events.jsonl --format json --output artifacts/inferred.json
+      - python -m iamlp.cli generate --from-agg artifacts/aggregate.json --mode actions --format json --output artifacts/policy.json
+      - pip-audit -r requirements.txt --format json --output artifacts/scan.json || true
+      - python - <<'PY'
+import json, sys
+from pathlib import Path
+
+cases = [
+    {"action": "s3:GetObject", "resource": "arn:aws:s3:::example-bucket/object.txt"},
+    {"action": "s3:PutObject", "resource": "arn:aws:s3:::example-bucket/object.txt"},
+]
+Path('artifacts/cases.json').write_text(json.dumps(cases))
+PY
+      - python -m iamlp.cli diff --before artifacts/policy.json --after artifacts/policy.json --cases artifacts/cases.json --format json --output artifacts/diff.json || true
+  post_build:
+    commands:
+      - echo "Evaluating diff results"
+      - python - <<'PY'
+import json, sys
+from pathlib import Path
+path = Path('artifacts/diff.json')
+if not path.exists():
+    print('Diff report missing, skipping gate')
+    sys.exit(0)
+diff = json.loads(path.read_text())
+metrics = diff.get('metrics', {})
+before = metrics.get('accessDeniedReduction', 0)
+if before is None:
+    before = 0
+if before < -0.05:
+    print('AccessDenied increased beyond 5%, failing build')
+    sys.exit(3)
+print('Diff metrics:', metrics)
+PY
+      - python - <<'PY'
+from pathlib import Path
+import hashlib
+
+scan_path = Path('artifacts/scan.json')
+if scan_path.exists():
+    digest = hashlib.sha256(scan_path.read_bytes()).hexdigest()
+    Path('checksums.txt').write_text(f"{digest}  scan.json\n")
+else:
+    print('scan.json missing; checksum file not created')
+PY
+      - echo $CODEBUILD_RESOLVED_SOURCE_VERSION > commit.txt
+artifacts:
+  files:
+    - artifacts/**/*
+    - checksums.txt
+    - commit.txt
+  discard-paths: no

@@ -1,0 +1,22 @@
+{
+  "Records": [
+    {
+      "eventTime": "2024-01-01T00:00:00Z",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "GetObject",
+      "userIdentity": {
+        "type": "IAMUser",
+        "arn": "arn:aws:iam::123456789012:user/Alice"
+      },
+      "resources": [
+        {
+          "ARN": "arn:aws:s3:::example-bucket/object.txt"
+        }
+      ],
+      "requestParameters": {
+        "bucketName": "example-bucket",
+        "key": "object.txt"
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "Resources": {
+    "WildPolicy": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "*",
+              "Resource": "*"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

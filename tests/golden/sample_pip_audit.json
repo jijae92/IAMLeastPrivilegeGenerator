@@ -1,0 +1,28 @@
+{
+  "dependencies": [
+    {
+      "name": "pkg1",
+      "version": "1.0.0",
+      "vulns": [
+        {
+          "id": "CVE-0001",
+          "severity": "HIGH",
+          "description": "critical issue",
+          "fix_versions": ["1.1.0"]
+        }
+      ]
+    },
+    {
+      "name": "pkg2",
+      "version": "2.0.0",
+      "vulns": [
+        {
+          "id": "CVE-0002",
+          "severity": "LOW",
+          "description": "minor issue",
+          "fix_versions": []
+        }
+      ]
+    }
+  ]
+}

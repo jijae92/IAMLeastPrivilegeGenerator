@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>IAM Least-Privilege Generator Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-+8VOB0fOkH1ZZ1xd6Q671O5jM90+hduLoUHCz9wy52IOsUogT0GrbAGq6c/gSbb/" crossorigin="anonymous"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #0b1120;
+        color: #f8fafc;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 5rem;
+      }
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+      }
+      p.lead {
+        margin-top: 0;
+        color: #cbd5f5;
+      }
+      section {
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 18px;
+        padding: 1.75rem 2rem;
+        margin-top: 2rem;
+        box-shadow: 0 24px 48px -24px rgba(15, 118, 110, 0.45);
+      }
+      section h2 {
+        margin-top: 0;
+        font-size: 1.4rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+      }
+      input[type="text"],
+      input[type="url"],
+      input[type="file"],
+      textarea {
+        width: 100%;
+        padding: 0.75rem 0.9rem;
+        margin-bottom: 1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(15, 23, 42, 0.6);
+        color: #e2e8f0;
+        font-size: 0.95rem;
+      }
+      input[type="file"] {
+        padding: 0.6rem 0.9rem;
+      }
+      button {
+        background: linear-gradient(135deg, #22d3ee, #6366f1);
+        border: none;
+        border-radius: 12px;
+        color: #0f172a;
+        font-weight: 700;
+        padding: 0.75rem 1.8rem;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.2s ease;
+        font-size: 0.95rem;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 24px -16px rgba(45, 212, 191, 0.6);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+      }
+      .status {
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+        color: #bae6fd;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+        font-size: 0.95rem;
+      }
+      th, td {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        padding: 0.75rem;
+        text-align: left;
+      }
+      th {
+        color: #bfdbfe;
+        font-weight: 600;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      .risk-high {
+        color: #facc15;
+        font-weight: 700;
+      }
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .metric-card {
+        background: rgba(15, 23, 42, 0.65);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        border-radius: 14px;
+        padding: 1rem 1.2rem;
+      }
+      .metric-card h3 {
+        margin: 0;
+        font-size: 0.95rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .metric-card p {
+        margin: 0.35rem 0 0;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #f8fafc;
+      }
+      canvas {
+        background: rgba(15, 23, 42, 0.7);
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        padding: 1rem;
+        margin-top: 1rem;
+      }
+      footer {
+        margin-top: 3rem;
+        font-size: 0.85rem;
+        color: #94a3b8;
+        text-align: center;
+      }
+      @media (max-width: 640px) {
+        main { padding: 2.5rem 1rem 4rem; }
+        section { padding: 1.5rem; }
+        h1 { font-size: 2rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>IAM Least-Privilege Generator</h1>
+      <p class="lead">Automate CloudTrail analysis, policy generation, and drift tracking.</p>
+
+      <section id="policy-generator">
+        <h2>Generate Policy Draft</h2>
+        <label for="api-url">API Gateway URL</label>
+        <input type="url" id="api-url" placeholder="https://abc123.execute-api.us-east-1.amazonaws.com/prod" />
+
+        <label for="principal-arn">Principal ARN</label>
+        <input type="text" id="principal-arn" placeholder="arn:aws:iam::123456789012:role/AppRole" />
+
+        <label for="analysis-input">Aggregated actions JSON (optional)</label>
+        <textarea id="analysis-input" rows="4" placeholder='[{"action":"s3:GetObject","service":"s3","resources":["arn:aws:s3:::example/*"]}]'></textarea>
+
+        <div class="actions">
+          <button id="generate-policy">정책 생성</button>
+          <span class="status" id="generate-status"></span>
+        </div>
+      </section>
+
+      <section id="diff-viewer">
+        <h2>전/후 비교 업로드</h2>
+        <p class="lead" style="font-size:0.95rem; color:#94a3b8; margin-bottom:1rem;">Upload the JSON output from <code>iamlp diff</code> to visualize reductions.</p>
+        <label for="diff-file">Diff JSON file</label>
+        <input type="file" id="diff-file" accept="application/json" />
+        <div class="status" id="diff-status"></div>
+
+        <div class="metrics-grid" id="metric-cards" hidden>
+          <div class="metric-card">
+            <h3>Action Delta</h3>
+            <p id="metric-action-delta">0</p>
+          </div>
+          <div class="metric-card">
+            <h3>Resource Reduction</h3>
+            <p id="metric-resource">0%</p>
+          </div>
+          <div class="metric-card">
+            <h3>AccessDenied Reduction</h3>
+            <p id="metric-deny">0%</p>
+          </div>
+          <div class="metric-card">
+            <h3>High-Risk Cut</h3>
+            <p id="metric-risk">0</p>
+          </div>
+        </div>
+
+        <table id="service-table" hidden>
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Allowed Actions After</th>
+              <th>Concrete Resources %</th>
+              <th>Risk</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <canvas id="diff-chart" height="220" hidden></canvas>
+      </section>
+
+      <footer>
+        Generated by IAM Least-Privilege Generator • Upload fresh diff reports to monitor drift.
+      </footer>
+    </main>
+
+    <script>
+      const HIGH_RISK = new Set(["iam", "kms", "organizations", "sts"]);
+
+      async function generatePolicy() {
+        const apiUrl = document.getElementById('api-url').value.trim();
+        const principalArn = document.getElementById('principal-arn').value.trim();
+        const rawAnalysis = document.getElementById('analysis-input').value.trim();
+        const status = document.getElementById('generate-status');
+
+        if (!apiUrl) {
+          status.textContent = 'API URL을 입력하세요.';
+          status.style.color = '#facc15';
+          return;
+        }
+
+        const body = {
+          principalArn: principalArn || null,
+          actions: [],
+        };
+        if (rawAnalysis) {
+          try {
+            body.actions = JSON.parse(rawAnalysis);
+          } catch (err) {
+            status.textContent = 'Aggregated actions JSON을 파싱할 수 없습니다.';
+            status.style.color = '#f87171';
+            return;
+          }
+        }
+
+        status.textContent = '요청 중...';
+        status.style.color = '#bae6fd';
+
+        try {
+          const response = await fetch(apiUrl.replace(/\/$/, '') + '/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+
+          if (!response.ok) {
+            throw new Error('API returned ' + response.status);
+          }
+
+          const data = await response.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          const filenamePrincipal = principalArn ? principalArn.split('/').pop() : 'policy';
+          link.download = `${filenamePrincipal || 'policy'}-draft.json`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          status.textContent = '정책 초안이 다운로드되었습니다.';
+          status.style.color = '#22d3ee';
+        } catch (err) {
+          console.error(err);
+          status.textContent = `요청 실패: ${err.message}`;
+          status.style.color = '#f87171';
+        }
+      }
+
+      let chartInstance = null;
+
+      async function handleDiffUpload(event) {
+        const file = event.target.files?.[0];
+        const status = document.getElementById('diff-status');
+        if (!file) {
+          status.textContent = '';
+          return;
+        }
+        try {
+          const text = await file.text();
+          const diff = JSON.parse(text);
+          status.textContent = `Loaded ${file.name}`;
+          status.style.color = '#bae6fd';
+          renderDiff(diff);
+        } catch (err) {
+          console.error(err);
+          status.textContent = 'Diff JSON 파싱 실패';
+          status.style.color = '#f87171';
+        }
+      }
+
+      function renderDiff(diff) {
+        const metrics = diff.metrics || {};
+        document.getElementById('metric-cards').hidden = false;
+        document.getElementById('metric-action-delta').textContent = metrics.allowedActionDelta ?? 0;
+        document.getElementById('metric-resource').textContent = formatPercentage(metrics.resourceReductionRatio);
+        document.getElementById('metric-deny').textContent = formatPercentage(metrics.accessDeniedReduction);
+        document.getElementById('metric-risk').textContent = metrics.highRiskServiceReduction ?? 0;
+
+        const table = document.getElementById('service-table');
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+        const serviceStats = summariseServices(diff);
+        serviceStats.forEach(row => {
+          const tr = document.createElement('tr');
+          const serviceCell = document.createElement('td');
+          serviceCell.textContent = row.service;
+          if (row.risk === 'High') {
+            serviceCell.classList.add('risk-high');
+          }
+          tr.appendChild(serviceCell);
+
+          const actionCell = document.createElement('td');
+          actionCell.textContent = row.allowedAfter;
+          tr.appendChild(actionCell);
+
+          const resourceCell = document.createElement('td');
+          resourceCell.textContent = formatPercentage(row.concreteRatio);
+          tr.appendChild(resourceCell);
+
+          const riskCell = document.createElement('td');
+          riskCell.textContent = row.risk;
+          tr.appendChild(riskCell);
+
+          tbody.appendChild(tr);
+        });
+        table.hidden = serviceStats.length === 0;
+
+        const ctx = document.getElementById('diff-chart');
+        ctx.hidden = false;
+        const datasets = [
+          metrics.resourceReductionRatio ?? 0,
+          metrics.accessDeniedReduction ?? 0,
+        ].map(v => (typeof v === 'number' ? Math.max(Math.min(v * 100, 100), -100) : 0));
+
+        if (chartInstance) {
+          chartInstance.destroy();
+        }
+        chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: ['Resource Scope Reduction %', 'AccessDenied Reduction %'],
+            datasets: [
+              {
+                label: 'Improvement',
+                data: datasets,
+                backgroundColor: ['rgba(45, 212, 191, 0.7)', 'rgba(96, 165, 250, 0.7)'],
+                borderRadius: 8,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+            },
+            scales: {
+              y: {
+                max: 100,
+                min: -100,
+                ticks: {
+                  callback: value => `${value}%`,
+                },
+                grid: { color: 'rgba(148, 163, 184, 0.15)' },
+              },
+              x: { grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      function summariseServices(diff) {
+        if (!diff || !Array.isArray(diff.cases)) return [];
+        const map = new Map();
+        diff.cases.forEach(entry => {
+          const { action, after, resource } = entry;
+          if (!action) return;
+          const service = action.split(':')[0];
+          if (!map.has(service)) {
+            map.set(service, { allowedAfter: 0, concreteCount: 0, total: 0 });
+          }
+          const summary = map.get(service);
+          summary.total += 1;
+          if (after === 'Allow') {
+            summary.allowedAfter += 1;
+            if (resource && resource !== '*') {
+              summary.concreteCount += 1;
+            }
+          }
+        });
+        return Array.from(map.entries()).map(([service, stats]) => {
+          const concreteRatio = stats.total > 0 ? stats.concreteCount / stats.total : 0;
+          const risk = HIGH_RISK.has(service) ? 'High' : 'Normal';
+          return {
+            service,
+            allowedAfter: stats.allowedAfter,
+            concreteRatio,
+            risk,
+          };
+        }).sort((a, b) => b.allowedAfter - a.allowedAfter);
+      }
+
+      function formatPercentage(value) {
+        if (typeof value !== 'number' || Number.isNaN(value)) return '0%';
+        return `${(value * 100).toFixed(1)}%`;
+      }
+
+      document.getElementById('generate-policy').addEventListener('click', generatePolicy);
+      document.getElementById('diff-file').addEventListener('change', handleDiffUpload);
+    </script>
+  </body>
+</html>

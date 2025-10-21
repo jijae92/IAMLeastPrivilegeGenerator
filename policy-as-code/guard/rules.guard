@@ -1,0 +1,20 @@
+# Rule 1: Disallow secrets in Lambda environment variables
+rule LambdaEnvNoSecrets when Resources.*.Type == "AWS::Lambda::Function" {
+    Properties.Environment exists => Properties.Environment.Variables.* all !~ /(password|secret|token|key)/i
+}
+
+# Rule 2: Disallow IAM wildcard actions/resources
+rule IAMPolicyNoWildcard when Resources.*.Type == /AWS::IAM::(Policy|ManagedPolicy|Role)/ {
+    Properties.PolicyDocument.Statement[*] {
+        (Action exists => Action all != "*")
+        (Resource exists => Resource all != "*")
+    }
+}
+
+# Rule 3: Disallow wide-open egress security groups
+rule SecurityGroupNoOpenEgress when Resources.*.Type == "AWS::EC2::SecurityGroup" {
+    Properties.SecurityGroupEgress exists => Properties.SecurityGroupEgress[*] {
+        (CidrIp exists => CidrIp != "0.0.0.0/0")
+        (IpProtocol exists => IpProtocol != "-1")
+    }
+}

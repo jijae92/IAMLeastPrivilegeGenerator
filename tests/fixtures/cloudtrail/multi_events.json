@@ -1,0 +1,119 @@
+[
+  {
+    "eventTime": "2024-01-01T00:00:00Z",
+    "eventSource": "s3.amazonaws.com",
+    "eventName": "GetObject",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Alice"
+    },
+    "resources": [
+      {"ARN": "arn:aws:s3:::example-bucket/object.txt"}
+    ],
+    "requestParameters": {
+      "bucketName": "example-bucket",
+      "key": "object.txt"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T01:00:00Z",
+    "eventSource": "dynamodb.amazonaws.com",
+    "eventName": "PutItem",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "AssumedRole",
+      "arn": "arn:aws:sts::123456789012:assumed-role/AppRole/session",
+      "sessionContext": {
+        "sessionIssuer": {
+          "type": "Role",
+          "arn": "arn:aws:iam::123456789012:role/AppRole",
+          "accountId": "123456789012"
+        }
+      }
+    },
+    "resources": [],
+    "requestParameters": {
+      "tableName": "Orders"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T02:00:00Z",
+    "eventSource": "lambda.amazonaws.com",
+    "eventName": "Invoke",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Bob"
+    },
+    "requestParameters": {
+      "functionName": "ProcessOrders"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T03:00:00Z",
+    "eventSource": "kms.amazonaws.com",
+    "eventName": "Encrypt",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Bob"
+    },
+    "requestParameters": {
+      "keyId": "1234abcd-12ab-34cd-56ef-1234567890ab"
+    },
+    "errorCode": "AccessDenied"
+  },
+  {
+    "eventTime": "2024-01-01T04:00:00Z",
+    "eventSource": "ssm.amazonaws.com",
+    "eventName": "GetParameter",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Bob"
+    },
+    "requestParameters": {
+      "name": "/app/config"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T05:00:00Z",
+    "eventSource": "secretsmanager.amazonaws.com",
+    "eventName": "GetSecretValue",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Carol"
+    },
+    "requestParameters": {
+      "secretId": "MySecret"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T06:00:00Z",
+    "eventSource": "sqs.amazonaws.com",
+    "eventName": "SendMessage",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Dave"
+    },
+    "requestParameters": {
+      "queueUrl": "https://sqs.us-east-1.amazonaws.com/123456789012/MyQueue"
+    }
+  },
+  {
+    "eventTime": "2024-01-01T07:00:00Z",
+    "eventSource": "sns.amazonaws.com",
+    "eventName": "Publish",
+    "awsRegion": "us-east-1",
+    "userIdentity": {
+      "type": "IAMUser",
+      "arn": "arn:aws:iam::123456789012:user/Eve"
+    },
+    "requestParameters": {
+      "topicArn": "arn:aws:sns:us-east-1:123456789012:Alerts"
+    }
+  }
+]

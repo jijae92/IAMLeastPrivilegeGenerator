@@ -1,0 +1,255 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: IAM Least-Privilege Generator stack (CloudTrail ingest, aggregation, API, and optional UI)
+
+Parameters:
+  ExistingTrailBucket:
+    Type: String
+    Default: ""
+    Description: Optional existing S3 bucket name hosting CloudTrail logs. Leave blank to create one.
+  TrailPrefix:
+    Type: String
+    Default: "cloudtrail/"
+    Description: Key prefix for CloudTrail log objects.
+  MinCount:
+    Type: Number
+    Default: 1
+    Description: Minimum occurrence threshold for aggregations.
+  ExcludeActions:
+    Type: String
+    Default: ""
+    Description: Comma-separated action patterns to exclude during aggregation.
+  EnableUiDistribution:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+    Description: Whether to deploy the static UI via CloudFront.
+
+Conditions:
+  CreateTrailBucket:
+    Fn::Equals:
+      - !Ref ExistingTrailBucket
+      - ""
+  DeployUi:
+    Fn::Equals:
+      - !Ref EnableUiDistribution
+      - "true"
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 60
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref AggregationTable
+        MIN_COUNT: !Ref MinCount
+        EXCLUDE_ACTIONS: !Ref ExcludeActions
+    Policies:
+      - AWSLambdaBasicExecutionRole
+
+Resources:
+  CloudTrailBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateTrailBucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  AggregationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: principal_arn
+          AttributeType: S
+        - AttributeName: service_action
+          AttributeType: S
+        - AttributeName: service
+          AttributeType: S
+      KeySchema:
+        - AttributeName: principal_arn
+          KeyType: HASH
+        - AttributeName: service_action
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: service-index
+          Projection:
+            ProjectionType: ALL
+          KeySchema:
+            - AttributeName: service
+              KeyType: HASH
+            - AttributeName: principal_arn
+              KeyType: RANGE
+
+  AnalyzerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Description: CloudTrail analyzer Lambda
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref AggregationTable
+          MIN_COUNT: !Ref MinCount
+          EXCLUDE_ACTIONS: !Ref ExcludeActions
+      Events:
+        CloudTrailIngest:
+          Type: S3
+          Properties:
+            Bucket: !If [CreateTrailBucket, !Ref CloudTrailBucket, !Ref ExistingTrailBucket]
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: !Ref TrailPrefix
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !If
+                - CreateTrailBucket
+                - !Sub "arn:aws:s3:::${CloudTrailBucket}/*"
+                - !Sub "arn:aws:s3:::${ExistingTrailBucket}/*"
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:BatchWriteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:GetItem
+              - dynamodb:DescribeTable
+            Resource: !GetAtt AggregationTable.Arn
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource: !Sub "${AggregationTable.Arn}/index/*"
+        - Statement:
+            Effect: Allow
+            Action:
+              - iam:SimulateCustomPolicy
+              - iam:SimulatePrincipalPolicy
+            Resource: "*"
+      ReservedConcurrentExecutions: 5
+
+  AnalyzerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AnalyzerFunction}"
+      RetentionInDays: 30
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Description: REST API Lambda for policy generation and stats
+      Events:
+        RestApi:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref RestApi
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !GetAtt AggregationTable.Arn
+              - !Sub "${AggregationTable.Arn}/index/*"
+        - Statement:
+            Effect: Allow
+            Action:
+              - iam:SimulateCustomPolicy
+            Resource: "*"
+
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Condition: DeployUi
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+            AllowedHeaders:
+              - '*'
+
+  UiBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: DeployUi
+    Properties:
+      Bucket: !Ref UiBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub "${UiBucket.Arn}/*"
+
+  UiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: DeployUi
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: ui-origin
+            DomainName: !GetAtt UiBucket.DomainName
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          TargetOriginId: ui-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
+  UiUrl:
+    Condition: DeployUi
+    Description: CloudFront distribution domain for UI
+    Value: !GetAtt UiDistribution.DomainName
+  DynamoTableName:
+    Description: Aggregation DynamoDB table name
+    Value: !Ref AggregationTable
+  AnalyzerLogGroupName:
+    Description: CloudWatch log group for analyzer Lambda
+    Value: !Ref AnalyzerLogGroup

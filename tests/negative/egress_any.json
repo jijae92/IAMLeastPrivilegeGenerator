@@ -1,0 +1,15 @@
+{
+  "Resources": {
+    "OpenSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": "-1"
+          }
+        ]
+      }
+    }
+  }
+}

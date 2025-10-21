@@ -1,0 +1,16 @@
+{
+  "actions": [
+    "iam:List*",
+    "s3:List*"
+  ],
+  "resources": [
+    "arn:aws:s3:::example-bucket/*"
+  ],
+  "principals": [
+    "arn:aws:iam::123:role/Admin"
+  ],
+  "reason": "운영 임시 예외",
+  "owner": "platform-team@example.com",
+  "createdAt": "2025-01-01T00:00:00Z",
+  "expiresAt": "2025-12-31T23:59:59Z"
+}

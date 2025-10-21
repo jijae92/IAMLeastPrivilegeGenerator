@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: '3.11'
+      ARTIFACT_DIR: artifacts
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-tools pip-audit
+
+      - name: Install CloudFormation Guard
+        run: |
+          curl -sSL https://github.com/aws-cloudformation/cloudformation-guard/releases/download/v3.4.0/cfn-guard-v3.4.0-linux-x86_64.tar.gz -o guard.tgz
+          tar -xzf guard.tgz
+          sudo mv cfn-guard /usr/local/bin/cfn-guard
+          rm guard.tgz
+
+      - name: Compile dependencies
+        run: |
+          pip-compile --allow-unsafe --generate-hashes requirements.in
+          git diff --exit-code requirements.txt
+
+      - name: Install dependencies (hashed)
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install -e .
+
+      - name: Audit dependencies
+        run: |
+          pip-audit -r requirements.txt --require-hashes --format json > pip-audit.json || true
+          python - <<'PY'
+import json, sys, pathlib
+path = pathlib.Path("pip-audit.json")
+if not path.exists() or path.stat().st_size == 0:
+    sys.exit(0)
+report = json.loads(path.read_text())
+high = []
+for dep in report.get("dependencies", []):
+    for vuln in dep.get("vulns") or dep.get("vulnerabilities") or []:
+        severity = (vuln.get("severity") or "").upper()
+        if severity in {"HIGH", "CRITICAL"}:
+            high.append((dep.get("name"), vuln.get("id"), severity))
+if high:
+    for name, vid, sev in high:
+        print(f"High severity vulnerability: {name} {vid} ({sev})", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+
+      - name: Run linters
+        run: |
+          ruff check
+          ruff format --check
+
+      - name: Pre-commit (all files)
+        run: pre-commit run --all-files
+
+      - name: Validate IaC guardrails
+        run: |
+          cfn-guard validate --rules policy-as-code/guard/rules.guard --data infra/sam-app/template.yaml
+
+      - name: Generate SARIF and audit summary
+        id: audit_report
+        run: |
+          mkdir -p $ARTIFACT_DIR
+          python scripts/pr_comment.py --input pip-audit.json --sarif $ARTIFACT_DIR/scan.sarif --top 10 --output $ARTIFACT_DIR/audit_comment.md
+          cp pip-audit.json $ARTIFACT_DIR/pip-audit.json
+          echo "comment<<EOF" >> $GITHUB_OUTPUT
+          cat $ARTIFACT_DIR/audit_comment.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ env.ARTIFACT_DIR }}/scan.sarif
+
+      - name: Comment on PR with audit summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `${{ steps.audit_report.outputs.comment }}`.trim();
+            if (!body) {
+              core.info('No audit findings to comment on.');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Pytest with coverage
+        run: |
+          pytest --cov=core --cov=cli --cov-report=term-missing --cov-fail-under=80
+
+      - name: Prepare artifacts directory
+        run: |
+          mkdir -p $ARTIFACT_DIR
+          cp requirements.txt $ARTIFACT_DIR/requirements.txt
+
+      - name: CLI smoke test
+        run: |
+          python -m iamlp.cli parse --local-dir tests/fixtures/cloudtrail --format json --output artifacts/events.jsonl
+          python -m iamlp.cli aggregate --events artifacts/events.jsonl --format json --output artifacts/aggregate.json
+          python -m iamlp.cli infer --events artifacts/events.jsonl --format json --output artifacts/inferred.json
+          python -m iamlp.cli generate --from-agg artifacts/aggregate.json --mode actions --format json --output artifacts/policy.json
+
+      - name: Generate diff report (mock)
+        run: |
+          python - <<'PY'
+import json
+before = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {"Sid": "Stmt0", "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": ["*"]}
+    ],
+}
+after = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {"Sid": "Stmt0", "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": ["arn:aws:s3:::example-bucket/*"]}
+    ],
+}
+cases = [
+    {"action": "s3:GetObject", "resource": "arn:aws:s3:::example-bucket/object.txt"},
+    {"action": "s3:PutObject", "resource": "arn:aws:s3:::example-bucket/object.txt"},
+]
+Path = __import__('pathlib').Path
+artifacts = Path('artifacts')
+artifacts.mkdir(exist_ok=True)
+Path('artifacts/before.json').write_text(json.dumps(before))
+Path('artifacts/after.json').write_text(json.dumps(after))
+Path('artifacts/cases.json').write_text(json.dumps(cases))
+PY
+          python -m iamlp.cli diff --before artifacts/before.json --after artifacts/after.json --cases artifacts/cases.json --format md --output artifacts/diff.md || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iam-lp-artifacts
+          path: artifacts

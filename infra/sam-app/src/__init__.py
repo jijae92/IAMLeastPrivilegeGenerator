@@ -1,0 +1,1 @@
+"""SAM packaged lambda sources."""

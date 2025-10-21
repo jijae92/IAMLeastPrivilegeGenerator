@@ -1,0 +1,9 @@
+{
+  "actions": ["pkg2*"],
+  "resources": [],
+  "principals": [],
+  "reason": "testing waiver",
+  "owner": "security@example.com",
+  "createdAt": "2025-01-01T00:00:00Z",
+  "expiresAt": "2025-12-31T23:59:59Z"
+}
