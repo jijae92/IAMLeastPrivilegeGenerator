@@ -45,9 +45,6 @@ class ActionRecord(BaseModel):
         for resource in event.resource_arns:
             if resource not in self.resources:
                 self.resources.append(resource)
-        if event.request_parameters:
-            if event.request_parameters not in self.conditions:
-                self.conditions.append(dict(event.request_parameters))
 
 
 class PolicyStatement(BaseModel):
